@@ -15,6 +15,9 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.neighbors import NearestNeighbors
 
+import numpy as np
+import scipy.sparse as sp
+
 from velocyto.diffusion import Diffusion
 from velocyto.estimation import (colDeltaCor, colDeltaCorLog10,
                                  colDeltaCorLog10partial, colDeltaCorpartial,
@@ -400,7 +403,67 @@ class modified_VelocytoLoom():
             if calculate_randomized:
                 np.fill_diagonal(self.corrcoef_random, 0)
 
+
     def calculate_embedding_shift(self, sigma_corr: float=0.05) -> None:
+        """Use the transition probability to project the velocity direction on the embedding
+
+        Arguments
+        ---------
+        sigma_corr: float, default=0.05
+            the kernel scaling
+
+        Returns
+        -------
+        Nothing but it creates the following attributes:
+        transition_prob: np.ndarray
+            the transition probability calculated using the exponential kernel on the correlation coefficient
+        delta_embedding: np.ndarray
+            The resulting vector
+        """
+        # Kernel evaluation
+        logging.debug("Calculate transition probability")
+
+        # Convert corrcoef to dense if it's sparse
+        if sp.issparse(self.corrcoef):
+            corrcoef_dense = self.corrcoef.toarray()
+        else:
+            corrcoef_dense = self.corrcoef
+
+        # Convert embedding_knn to dense
+        embedding_knn_dense = self.embedding_knn.toarray() if sp.issparse(self.embedding_knn) else self.embedding_knn
+
+        # Calculate transition probability
+        self.transition_prob = np.exp(corrcoef_dense / sigma_corr) * embedding_knn_dense
+        self.transition_prob /= self.transition_prob.sum(1)[:, None]
+
+        if hasattr(self, "corrcoef_random"):
+            logging.debug("Calculate transition probability for negative control")
+            if sp.issparse(self.corrcoef_random):
+                corrcoef_random_dense = self.corrcoef_random.toarray()
+            else:
+                corrcoef_random_dense = self.corrcoef_random
+            self.transition_prob_random = np.exp(corrcoef_random_dense / sigma_corr) * embedding_knn_dense
+            self.transition_prob_random /= self.transition_prob_random.sum(1)[:, None]
+
+        # Calculate unitary vectors
+        unitary_vectors = self.embedding.T[:, None, :] - self.embedding.T[:, :, None]
+        with np.errstate(divide='ignore', invalid='ignore'):
+            unitary_vectors /= np.linalg.norm(unitary_vectors, ord=2, axis=0)
+            np.fill_diagonal(unitary_vectors[0, ...], 0)
+            np.fill_diagonal(unitary_vectors[1, ...], 0)
+
+        # Calculate delta embedding
+        self.delta_embedding = (self.transition_prob * unitary_vectors).sum(2)
+        self.delta_embedding -= (embedding_knn_dense * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+        self.delta_embedding = self.delta_embedding.T
+
+        if hasattr(self, "corrcoef_random"):
+            self.delta_embedding_random = (self.transition_prob_random * unitary_vectors).sum(2)
+            self.delta_embedding_random -= (embedding_knn_dense * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+            self.delta_embedding_random = self.delta_embedding_random.T
+
+        
+    def calculate_embedding_shift_second_mode(self, sigma_corr: float=0.05) -> None:
         """Use the transition probability to project the velocity direction on the embedding
 
         Arguments
@@ -421,11 +484,11 @@ class modified_VelocytoLoom():
 
         # NOTE maybe sparse matrix here are slower than dense
         # NOTE if knn_random this could be made much faster either using sparse matrix or neigh_ixs
-        self.transition_prob = np.exp(self.corrcoef / sigma_corr) * self.embedding_knn.A  # naive
+        self.transition_prob = np.exp(self.corrcoef / sigma_corr) * self.embedding_knn.toarray()  # naive
         self.transition_prob /= self.transition_prob.sum(1)[:, None]
         if hasattr(self, "corrcoef_random"):
             logging.debug("Calculate transition probability for negative control")
-            self.transition_prob_random = np.exp(self.corrcoef_random / sigma_corr) * self.embedding_knn.A  # naive
+            self.transition_prob_random = np.exp(self.corrcoef_random / sigma_corr) * self.embedding_knn.toarray()  # naive
             self.transition_prob_random /= self.transition_prob_random.sum(1)[:, None]
 
         unitary_vectors = self.embedding.T[:, None, :] - self.embedding.T[:, :, None]  # shape (2,ncells,ncells)
@@ -435,15 +498,13 @@ class modified_VelocytoLoom():
             np.fill_diagonal(unitary_vectors[1, ...], 0)
 
         self.delta_embedding = (self.transition_prob * unitary_vectors).sum(2)
-        self.delta_embedding -= (self.embedding_knn.A * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+        self.delta_embedding -= (self.embedding_knn.toarray() * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
         self.delta_embedding = self.delta_embedding.T
-
 
         if hasattr(self, "corrcoef_random"):
             self.delta_embedding_random = (self.transition_prob_random * unitary_vectors).sum(2)
-            self.delta_embedding_random -= (self.embedding_knn.A * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+            self.delta_embedding_random -= (self.embedding_knn.toarray() * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
             self.delta_embedding_random = self.delta_embedding_random.T
-
 
     def calculate_grid_arrows(self, smooth: float=0.5, steps: Tuple=(40, 40),
                               n_neighbors: int=100, n_jobs: int=4, xylim: Tuple=((None, None), (None, None))) -> None:
