@@ -651,7 +651,7 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
     def simulate_shift(self, perturb_condition=None, GRN_unit=None,
                     n_propagation=3, ignore_warning=False, use_randomized_GRN=False, 
-                    clip_delta_X=False, use_old_method=False):
+                    clip_delta_X=False, n_min=None, n_max=None, use_old_method=False):
         """
         Simulate signal propagation with GRNs. Please see the CellOracle paper for details.
         This function simulates a gene expression pattern in the near future.
@@ -678,7 +678,7 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         """
         if use_old_method:
             self.__simulate_shift_old(perturb_condition, GRN_unit, n_propagation, 
-                                    ignore_warning, use_randomized_GRN, clip_delta_X)
+                                    ignore_warning, use_randomized_GRN, n_min, n_max, clip_delta_X)
         else:
             self.__simulate_shift_new(perturb_condition, GRN_unit, n_propagation, 
                                     ignore_warning, use_randomized_GRN, clip_delta_X)
@@ -753,7 +753,7 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
     def __simulate_shift_old(self, perturb_condition=None, GRN_unit=None,
                             n_propagation=3, ignore_warning=False, use_randomized_GRN=False, 
-                            clip_delta_X=False):
+                            n_min=None, n_max=None, clip_delta_X=False):
         """
         Simulate signal propagation with GRNs. Please see the CellOracle paper for details.
         This function simulates a gene expression pattern in the near future.
@@ -780,11 +780,11 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         """
 
         # 0. Reset previous simulation results if it exist
-        #self.ixs_markvov_simulation = None
-        #self.markvov_transition_id = None
-        #self.corrcoef = None
-        #self.transition_prob = None
-        #self.tr = None
+        self.ixs_markvov_simulation = None
+        self.markvov_transition_id = None
+        self.corrcoef = None
+        self.transition_prob = None
+        self.tr = None
         if n_min is None:
             n_min = CONFIG["N_PROP_MIN"]
         if n_max is None:
