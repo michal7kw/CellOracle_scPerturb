@@ -35,7 +35,6 @@ CONFIG = {"N_PROP_MIN": 1,
           "N_PROP_MAX": 5,
           "OOD_WARNING_EXCEEDING_PERCENTAGE": 50}
 
-
 def update_adata(adata):
     # Update Anndata
     # Anndata generated with Scanpy 1.4 or less should be updated with this function
@@ -48,8 +47,6 @@ def update_adata(adata):
         adata.uns['draw_graph']['params']['layout'] = lo
     except:
         pass
-
-
 
 def load_oracle(file_path):
 
@@ -80,7 +77,6 @@ def load_oracle(file_path):
 
     return obj
 
-
 class Oracle(modified_VelocytoLoom, Oracle_visualization):
     """
     Oracle is the main class in CellOracle. Oracle object imports scRNA-seq data (anndata) and TF information to infer cluster-specific GRNs. It can predict the future gene expression patterns and cell state transitions in response to  the perturbation of TFs. Please see the CellOracle paper for details.
@@ -110,9 +106,10 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         self.cv_mean_selected_genes = None
         self.TFdict = {}
 
-    ############################
+    ###############################################################################################################################################################################################################################################################
     ### 0. utility functions ###
-    ############################
+    ###############################################################################################################################################################################################################################################################
+    
     def copy(self):
         """
         Deepcopy itself.
@@ -135,7 +132,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         dump_hdf5(obj=self, filename=file_path,
                   data_compression=compression_opts,  chunks=(2048, 2048),
                   noarray_compression=compression_opts, pickle_protocol=4)
-
 
     def _generate_meta_data(self):
         info = {}
@@ -210,9 +206,10 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
         return message
 
-    ###################################
+    ###############################################################################################################################################################################################################################################################
     ### 1. Methods for loading data ###
-    ###################################
+    ###############################################################################################################################################################################################################################################################
+    
     def _process_TFdict_metadata(self, verbose=True):
 
         # Make list of all target genes and all reguolatory genes in the TFdict
@@ -233,8 +230,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
             elif n_reg < 50:
                 print(f"Total number of TF was {n_reg}. Although we can go to the GRN calculation with this data, but the TF number is small." )
-
-
 
     def import_TF_data(self, TF_info_matrix=None, TF_info_matrix_path=None, TFdict=None):
         """
@@ -274,9 +269,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         # Update summary of TFdata
         self._process_TFdict_metadata()
 
-
-
-
     def updateTFinfo_dictionary(self, TFdict={}):
         """
         Update a TF dictionary.
@@ -310,7 +302,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
         # Update summary of TFdata
         self._process_TFdict_metadata()
-
 
     def get_cluster_specific_TFdict_from_Links(self, links_object, ignore_warning=False):
 
@@ -407,7 +398,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         self.adata.var["symbol"] = self.adata.var.index.values
         self.adata.var["isin_top1000_var_mean_genes"] = self.adata.var.symbol.isin(self.high_var_genes)
 
-
     def import_anndata_as_normalized_count(self, adata, cluster_column_name=None, embedding_name=None, test_mode=False):
         """
         Load scRNA-seq data. scRNA-seq data should be prepared as an anndata object.
@@ -468,7 +458,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
             self.adata.var["symbol"] = self.adata.var.index.values
             self.adata.var["isin_top1000_var_mean_genes"] = self.adata.var.symbol.isin(self.high_var_genes)
 
-
     def change_cluster_unit(self, new_cluster_column_name):
         """
         Change clustering unit.
@@ -525,9 +514,10 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
                                                   return_as="dict")
         self.colorandum = np.array([col_dict[i] for i in self.adata.obs[self.cluster_column_name]])
 
-    ####################################
+    ###############################################################################################################################################################################################################################################################
     ### 2. Methods for GRN inference ###
-    ####################################
+    ###############################################################################################################################################################################################################################################################
+    
     def fit_GRN_for_simulation(self, GRN_unit="cluster", alpha=1, use_cluster_specific_TFdict=False, verbose_level=1):
         """
         Do GRN inference.
@@ -598,7 +588,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
         self.extract_active_gene_lists(verbose=False)
 
-
     def extract_active_gene_lists(self, return_as=None, verbose=False):
         """
         Args:
@@ -655,20 +644,22 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
         elif return_as == "unified_list":
             return unified_list
-
-
-
+    
     ###############################################################################################################################################################################################################################################################
-    #######################################################
-    ### 3. Methods for simulation of signal propagation ###
-    #######################################################
+    ### 3. Start: Methods for simulation of signal propagation ###
+    ###############################################################################################################################################################################################################################################################
 
     def simulate_shift(self, perturb_condition=None, GRN_unit=None,
-                    n_propagation=3, ignore_warning=False, use_randomized_GRN=False, clip_delta_X=False):
+                    n_propagation=3, ignore_warning=False, use_randomized_GRN=False, 
+                    clip_delta_X=False, use_old_method=False):
         """
         Simulate signal propagation with GRNs. Please see the CellOracle paper for details.
         This function simulates a gene expression pattern in the near future.
         Simulated values will be stored in anndata.layers: ["simulated_count"]
+        The simulation uses three types of data:
+        (1) GRN inference results (coef_matrix).
+        (2) Perturb_condition: You can set arbitrary perturbation condition.
+        (3) Gene expression matrix: The simulation starts from imputed gene expression data.
 
         Args:
             perturb_condition (dict): A dictionary where keys are cell names and values are dictionaries
@@ -678,17 +669,24 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
                     'cell2': {'GeneC': 0.8}
                 }
                 If a cell is not in the dictionary, no perturbation will be applied to it.
-
             GRN_unit (str): GRN type. Please select either "whole" or "cluster".
-
             n_propagation (int): Number of steps for signal propagation calculation.
-
             ignore_warning (bool): If True, suppress warnings.
-
             use_randomized_GRN (bool): If True, use randomized GRN for simulation.
-
             clip_delta_X (bool): If True, clip simulated gene expression shift to WT range.
+            use_old_method (bool): If True, use the old simulation method. Default is False.
         """
+        if use_old_method:
+            self.__simulate_shift_old(perturb_condition, GRN_unit, n_propagation, 
+                                    ignore_warning, use_randomized_GRN, clip_delta_X)
+        else:
+            self.__simulate_shift_new(perturb_condition, GRN_unit, n_propagation, 
+                                    ignore_warning, use_randomized_GRN, clip_delta_X)
+
+    def __simulate_shift_new(self, perturb_condition=None, GRN_unit=None,
+                            n_propagation=3, ignore_warning=False, use_randomized_GRN=False, 
+                            clip_delta_X=False):
+        # Implementation of the new method (your current implementation)
         self._clear_simulation_results()
 
         if GRN_unit is not None:
@@ -698,11 +696,9 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         elif hasattr(self, "coef_matrix_per_cluster"):
             GRN_unit = "cluster"
             self.GRN_unit = GRN_unit
-        elif hasattr(self, "coef_matrix"):
+        else:
             GRN_unit = "whole"
             self.GRN_unit = GRN_unit
-        else:
-            raise ValueError("GRN is not ready. Please run 'fit_GRN_for_simulation' first.")
 
         if use_randomized_GRN:
             print("Attention: Using randomized GRN for the perturbation simulation.")
@@ -755,6 +751,192 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         if not ignore_warning:
             self._check_ood_prediction()
 
+    def __simulate_shift_old(self, perturb_condition=None, GRN_unit=None,
+                            n_propagation=3, ignore_warning=False, use_randomized_GRN=False, 
+                            clip_delta_X=False):
+        """
+        Simulate signal propagation with GRNs. Please see the CellOracle paper for details.
+        This function simulates a gene expression pattern in the near future.
+        Simulated values will be stored in anndata.layers: ["simulated_count"]
+
+
+        The simulation use three types of data.
+        (1) GRN inference results (coef_matrix).
+        (2) Perturb_condition: You can set arbitrary perturbation condition.
+        (3) Gene expression matrix: The simulation starts from imputed gene expression data.
+
+        Args:
+            perturb_condition (dictionary): condition for perturbation.
+                if you want to simulate knockout for GeneX, please set [perturb_condition={"GeneX": 0.0}]
+                Although you can set any non-negative values for the gene condition, avoid setting biologically infeasible values for the perturb condition.
+                It is strongly recommended to check gene expression values in your data before selecting the perturb condition.
+
+            GRN_unit (str): GRN type. Please select either "whole" or "cluster". See the documentation of "fit_GRN_for_simulation" for the detailed explanation.
+
+            n_propagation (int): Calculation will be performed iteratively to simulate signal propagation in GRN.
+                You can set the number of steps for this calculation.
+                With a higher number, the results may recapitulate signal propagation for many genes.
+                However, a higher number of propagation may cause more error/noise.
+        """
+
+        # 0. Reset previous simulation results if it exist
+        #self.ixs_markvov_simulation = None
+        #self.markvov_transition_id = None
+        #self.corrcoef = None
+        #self.transition_prob = None
+        #self.tr = None
+        if n_min is None:
+            n_min = CONFIG["N_PROP_MIN"]
+        if n_max is None:
+            n_max = CONFIG["N_PROP_MAX"]
+        self._clear_simulation_results()
+
+        if GRN_unit is not None:
+            self.GRN_unit = GRN_unit
+        elif hasattr(self, "GRN_unit"):
+            GRN_unit = self.GRN_unit
+            #print("Currently selected GRN_unit: ", self.GRN_unit)
+        elif hasattr(self, "coef_matrix_per_cluster"):
+            GRN_unit = "cluster"
+            self.GRN_unit = GRN_unit
+        elif hasattr(self, "coef_matrix"):
+            GRN_unit = "whole"
+            self.GRN_unit = GRN_unit
+        else:
+            raise ValueError("GRN is not ready. Please run 'fit_GRN_for_simulation' first.")
+
+        if use_randomized_GRN:
+            print("Attention: Using randomized GRN for the perturbation simulation.")
+
+        # 1. prepare perturb information
+
+
+        self.perturb_condition = perturb_condition.copy()
+
+
+        # Prepare metadata before simulation
+        if not hasattr(self, "active_regulatory_genes"):
+            self.extract_active_gene_lists(verbose=False)
+
+        if not hasattr(self, "all_regulatory_genes_in_TFdict"):
+            self._process_TFdict_metadata()
+
+        for i, value in perturb_condition.items():
+            # 1st Sanity check
+            if not i in self.adata.var.index:
+                raise ValueError(f"Gene {i} is not included in the Gene expression matrix.")
+
+            # 2nd Sanity check
+            if i not in self.all_regulatory_genes_in_TFdict:
+                raise ValueError(f"Gene {i} is not included in the base GRN; It is not TF or TF motif information is not available. Cannot perform simulation.")
+
+            # 3rd Sanity check
+            if i not in self.active_regulatory_genes:
+                raise ValueError(f"Gene {i} does not have enough regulatory connection in the GRNs. Cannot perform simulation.")
+
+            # 4th Sanity check
+            if i not in self.high_var_genes:
+                if ignore_warning:
+                    pass
+                    #print(f"Variability score of Gene {i} is too low. Simulation accuracy may be poor with this gene.")
+                else:
+                    pass
+                    #print(f"Variability score of Gene {i} is too low. Simulation accuracy may be poor with this gene.")
+                    #raise ValueError(f"Variability score of Gene {i} is too low. Cannot perform simulation.")
+
+            # 5th Sanity check
+            if value < 0:
+                raise ValueError(f"Negative gene expression value is not allowed.")
+
+            # 6th Sanity check
+            safe = _is_perturb_condition_valid(adata=self.adata,
+                                        goi=i, value=value, safe_range_fold=2)
+            if not safe:
+                if ignore_warning:
+                    pass
+                else:
+                    raise ValueError(f"Input perturbation condition is far from actural gene expression value. Please follow the recommended usage. ")
+            # 7th QC
+            if n_min <= n_propagation <= n_max:
+                pass
+            else:
+                raise ValueError(f'n_propagation value error. It should be an integer from {n_min} to {n_max}.')
+
+        # reset simulation initiation point
+        self.adata.layers["simulation_input"] = self.adata.layers["imputed_count"].copy()
+        simulation_input = _adata_to_df(self.adata, "simulation_input")
+        for i in perturb_condition.keys():
+            simulation_input[i] = perturb_condition[i]
+
+
+        # 2. load gene expression matrix (initiation information for the simulation)
+        gem_imputed = _adata_to_df(self.adata, "imputed_count")
+
+        # 3. do simulation for signal propagation within GRNs
+        if GRN_unit == "whole":
+            if use_randomized_GRN == False:
+                coef_matrix = self.coef_matrix.copy()
+            else:
+                if hasattr(self, "coef_matrix_randomized") == False:
+                    print("The random coef matrix was calculated.")
+                    self.calculate_randomized_coef_table()
+                coef_matrix = self.coef_matrix_randomized.copy()
+            gem_simulated = _do_simulation(coef_matrix=coef_matrix,
+                                            simulation_input=simulation_input,
+                                            gem=gem_imputed,
+                                            n_propagation=n_propagation)
+
+        elif GRN_unit == "cluster":
+            simulated = []
+            cluster_info = self.adata.obs[self.cluster_column_name]
+            for cluster in np.unique(cluster_info):
+
+                if use_randomized_GRN == False:
+                    coef_matrix = self.coef_matrix_per_cluster[cluster].copy()
+                else:
+                    if hasattr(self, "coef_matrix_per_cluster_randomized") == False:
+                        print("The random coef matrix was calculated.")
+                        self.calculate_randomized_coef_table()
+                    coef_matrix = self.coef_matrix_per_cluster_randomized[cluster].copy()
+                cells_in_the_cluster_bool = (cluster_info == cluster)
+                simulation_input_ = simulation_input[cells_in_the_cluster_bool]
+                gem_ = gem_imputed[cells_in_the_cluster_bool]
+
+                simulated_in_the_cluster = _do_simulation(
+                                                coef_matrix=coef_matrix,
+                                                simulation_input=simulation_input_,
+                                                gem=gem_,
+                                                n_propagation=n_propagation)
+
+                simulated.append(simulated_in_the_cluster)
+            gem_simulated = pd.concat(simulated, axis=0)
+            gem_simulated = gem_simulated.reindex(gem_imputed.index)
+
+        else:
+            raise ValueError("GRN_unit shold be either of 'whole' or 'cluster'")
+
+        # 4. store simulation results
+        #  simulated future gene expression matrix
+        self.adata.layers["simulated_count"] = gem_simulated.values
+
+        #  difference between simulated values and original values
+        self.adata.layers["delta_X"] = self.adata.layers["simulated_count"] - self.adata.layers["imputed_count"]
+
+        # Clip simulated gene expression to avoid out of distribution prediction.
+        if clip_delta_X:
+            self.clip_delta_X()
+
+        # Sanity check; check distribution of simulated values. If the value is far from original gene expression range, it will give warning.
+        if ignore_warning:
+            pass
+        else:
+            ood_stat = self.evaluate_simulated_gene_distribution_range()
+            ood_stat = ood_stat[ood_stat.Max_exceeding_ratio > CONFIG["OOD_WARNING_EXCEEDING_PERCENTAGE"]/100]
+            if len(ood_stat)> 0:
+                message = f"There may be out of distribution prediction in {len(ood_stat)} genes. It is recommended to set `clip_delta_X=True` to avoid the out of distribution prediction."
+                message += "\n To see the detail, please run `oracle.evaluate_simulated_gene_distribution_range()`"
+                warnings.warn(message, UserWarning, stacklevel=2)
+
     def _validate_perturb_condition(self, gene, value, ignore_warning):
         """Helper method to validate perturbation conditions for a single gene."""
         if gene not in self.adata.var_names:
@@ -779,18 +961,9 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
             message += "\nTo see the detail, please run `oracle.evaluate_simulated_gene_distribution_range()`"
             warnings.warn(message, UserWarning, stacklevel=2)
 
-
     ###############################################################################################################################################################################################################################################################
-
-
-
-
-
-
-
-
-
-
+    ### 3. End: Methods for simulation of signal propagation ###
+    ###############################################################################################################################################################################################################################################################
 
     def _clear_simulation_results(self):
         att_list = ["flow_embedding", "flow_grid", "flow", "flow_norm_magnitude",
@@ -889,7 +1062,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
                 fig.savefig(os.path.join(save, f"gene_expression_histogram_Spi1_KO_{goi}.png"), transparent=True)
             plt.show()
 
-
     def clip_delta_X(self):
         """
         To avoid issue caused by out-of-distribution prediction, this function clip simulated gene expression value to the unperturbed gene expression range.
@@ -911,8 +1083,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
         self.adata.layers["simulated_count"] = simulated_count.values
         self.adata.layers["delta_X"] = self.adata.layers["simulated_count"] - self.adata.layers["imputed_count"]
-
-
 
     def estimate_impact_of_perturbations_under_various_ns(self, perturb_condition, order=1, n_prop_max=5, GRN_unit=None, figsize=[7, 3]):
         """
@@ -957,11 +1127,9 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
         return fig
 
-
     def calculate_p_mass(self, smooth=0.8, n_grid=40, n_neighbors=200, n_jobs=-1):
 
         self.calculate_grid_arrows(smooth=0.8, steps=(n_grid, n_grid), n_neighbors=n_neighbors, n_jobs=-1)
-
 
     def suggest_mass_thresholds(self, n_suggestion=12, s=1, n_col=4):
 
@@ -996,7 +1164,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
             ax_.set_title(f"min_mass: {suggestions[i]: .2g}")
             ax_.axis("off")
 
-
     def calculate_mass_filter(self, min_mass=0.01, plot=False):
 
         self.min_mass = min_mass
@@ -1029,9 +1196,10 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         if (hasattr(self, "coef_matrix_per_cluster") == False) and (hasattr(self, "coef_matrix") == False):
             print("GRN calculation for simulation is not finished. Run fit_GRN_for_simulation() first.")
 
-    ########################################
+    ###############################################################################################################################################################################################################################################################
     ### 4. Methods for Markov simulation ###
-    ########################################
+    ###############################################################################################################################################################################################################################################################
+    
     def prepare_markov_simulation(self, verbose=False):
         """
         Pick up cells for Markov simulation.
@@ -1073,7 +1241,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
 
         self.prepare_markov(sigma_D=diag_step_dist, sigma_W=diag_step_dist/2.,
                        direction='forward', cells_ixs=ixs)
-
 
     def run_markov_chain_simulation(self, n_steps=500, n_duplication=5, seed=123, calculate_randomized=True):
         """
@@ -1133,7 +1300,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
             ind = np.repeat(self.ixs_markvov_simulation, n_duplication)
             self.markvov_transition_random_id = pd.DataFrame(transition_random, ind)
 
-
     def summarize_mc_results_by_cluster(self, cluster_use, random=False):
         """
         This function summarizes the simulated cell state-transition by groping the results into each cluster.
@@ -1152,7 +1318,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         markvov_transition_cluster = pd.DataFrame(markvov_transition_cluster,
                                                index=self.markvov_transition_id.index)
         return markvov_transition_cluster
-
 
     def plot_mc_results_as_sankey(self, cluster_use, start=0, end=-1, order=None, font_size=10):
         """
@@ -1259,7 +1424,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         tt = self.markvov_transition_id.iloc[cell_ix_in_markvov_simulation_tid,:].values[time_range]
         plt.plot(self.embedding[:,0][tt], self.embedding[:,1][tt], **args)
 
-
     def count_cells_in_mc_resutls(self, cluster_use, end=-1, order=None):
         """
         Count the simulated cell by the cluster.
@@ -1349,11 +1513,10 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
         self.get_markov_simulation_cell_transition_table(cluster_column_name=cluster_column_name, end=end, return_df=False)
 
 
-
-
-    ###################################################
+    ###############################################################################################################################################################################################################################################################
     ### 5. GRN inference for Network score analysis ###
-    ###################################################
+    ###############################################################################################################################################################################################################################################################
+    
     def get_links(self, cluster_name_for_GRN_unit=None, alpha=10, bagging_number=20, verbose_level=1, test_mode=False, model_method="bagging_ridge", ignore_warning=False, n_jobs=-1):
         """
         Makes GRN for each cluster and returns results as a Links object.
@@ -1414,8 +1577,6 @@ class Oracle(modified_VelocytoLoom, Oracle_visualization):
                           model_method=model_method,
                           n_jobs=n_jobs)
         return links
-
-
 
 
 def _deal_with_na(transition_prob):

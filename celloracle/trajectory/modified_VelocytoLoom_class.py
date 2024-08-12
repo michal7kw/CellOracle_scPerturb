@@ -404,30 +404,31 @@ class modified_VelocytoLoom():
                 np.fill_diagonal(self.corrcoef_random, 0)
 
 
-    def calculate_embedding_shift(self, sigma_corr: float=0.05) -> None:
-        """Use the transition probability to project the velocity direction on the embedding
-
-        Arguments
-        ---------
-        sigma_corr: float, default=0.05
-            the kernel scaling
-
-        Returns
-        -------
-        Nothing but it creates the following attributes:
-        transition_prob: np.ndarray
-            the transition probability calculated using the exponential kernel on the correlation coefficient
-        delta_embedding: np.ndarray
-            The resulting vector
+    def calculate_embedding_shift(self, sigma_corr: float = 0.05, use_old_method: bool = False) -> None:
         """
-        # Kernel evaluation
+        Use the transition probability to project the velocity direction on the embedding.
+
+        Args:
+            sigma_corr (float): The kernel scaling. Default is 0.05.
+            use_old_method (bool): If True, use the old implementation. Default is False.
+
+        Returns:
+            None, but creates the following attributes:
+            - transition_prob: np.ndarray
+                The transition probability calculated using the exponential kernel on the correlation coefficient.
+            - delta_embedding: np.ndarray
+                The resulting vector.
+        """
+        if use_old_method:
+            self._calculate_embedding_shift_old(sigma_corr)
+        else:
+            self._calculate_embedding_shift_new(sigma_corr)
+
+    def _calculate_embedding_shift_new(self, sigma_corr: float = 0.05) -> None:
         logging.debug("Calculate transition probability")
 
         # Convert corrcoef to dense if it's sparse
-        if sp.issparse(self.corrcoef):
-            corrcoef_dense = self.corrcoef.toarray()
-        else:
-            corrcoef_dense = self.corrcoef
+        corrcoef_dense = self.corrcoef.toarray() if sp.issparse(self.corrcoef) else self.corrcoef
 
         # Convert embedding_knn to dense
         embedding_knn_dense = self.embedding_knn.toarray() if sp.issparse(self.embedding_knn) else self.embedding_knn
@@ -438,10 +439,7 @@ class modified_VelocytoLoom():
 
         if hasattr(self, "corrcoef_random"):
             logging.debug("Calculate transition probability for negative control")
-            if sp.issparse(self.corrcoef_random):
-                corrcoef_random_dense = self.corrcoef_random.toarray()
-            else:
-                corrcoef_random_dense = self.corrcoef_random
+            corrcoef_random_dense = self.corrcoef_random.toarray() if sp.issparse(self.corrcoef_random) else self.corrcoef_random
             self.transition_prob_random = np.exp(corrcoef_random_dense / sigma_corr) * embedding_knn_dense
             self.transition_prob_random /= self.transition_prob_random.sum(1)[:, None]
 
@@ -462,30 +460,14 @@ class modified_VelocytoLoom():
             self.delta_embedding_random -= (embedding_knn_dense * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
             self.delta_embedding_random = self.delta_embedding_random.T
 
-        
-    def calculate_embedding_shift_second_mode(self, sigma_corr: float=0.05) -> None:
-        """Use the transition probability to project the velocity direction on the embedding
-
-        Arguments
-        ---------
-        sigma_corr: float, default=0.05
-            the kernel scaling
-
-        Returns
-        -------
-        Nothing but it creates the following attributes:
-        transition_prob: np.ndarray
-            the transition probability calculated using the exponential kernel on the correlation coefficient
-        delta_embedding: np.ndarray
-            The resulting vector
-        """
-        # Kernel evaluation
+    def _calculate_embedding_shift_old(self, sigma_corr: float = 0.05) -> None:
         logging.debug("Calculate transition probability")
 
         # NOTE maybe sparse matrix here are slower than dense
         # NOTE if knn_random this could be made much faster either using sparse matrix or neigh_ixs
         self.transition_prob = np.exp(self.corrcoef / sigma_corr) * self.embedding_knn.toarray()  # naive
         self.transition_prob /= self.transition_prob.sum(1)[:, None]
+        
         if hasattr(self, "corrcoef_random"):
             logging.debug("Calculate transition probability for negative control")
             self.transition_prob_random = np.exp(self.corrcoef_random / sigma_corr) * self.embedding_knn.toarray()  # naive
@@ -493,8 +475,8 @@ class modified_VelocytoLoom():
 
         unitary_vectors = self.embedding.T[:, None, :] - self.embedding.T[:, :, None]  # shape (2,ncells,ncells)
         with np.errstate(divide='ignore', invalid='ignore'):
-            unitary_vectors /= np.linalg.norm(unitary_vectors, ord=2, axis=0)  # divide by L2
-            np.fill_diagonal(unitary_vectors[0, ...], 0)  # fix nans
+            unitary_vectors /= np.linalg.norm(unitary_vectors, ord=2, axis=0)
+            np.fill_diagonal(unitary_vectors[0, ...], 0)
             np.fill_diagonal(unitary_vectors[1, ...], 0)
 
         self.delta_embedding = (self.transition_prob * unitary_vectors).sum(2)
