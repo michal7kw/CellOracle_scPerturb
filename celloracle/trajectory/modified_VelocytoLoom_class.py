@@ -460,33 +460,125 @@ class modified_VelocytoLoom():
             self.delta_embedding_random -= (embedding_knn_dense * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
             self.delta_embedding_random = self.delta_embedding_random.T
 
+
+    # def _calculate_embedding_shift_old(self, sigma_corr: float = 0.05) -> None:
+    #     logging.debug("Calculate transition probability using old method")
+
+    #     # Check if required attributes are set
+    #     if self.corrcoef is None or self.embedding_knn is None or self.embedding is None:
+    #         raise ValueError("corrcoef, embedding_knn, and embedding must be set before calling this method.")
+
+    #     try:
+    #         # Convert corrcoef to dense if it's sparse
+    #         corrcoef_dense = self.corrcoef.toarray() if sp.issparse(self.corrcoef) else self.corrcoef
+
+    #         # Calculate transition probability
+    #         self.transition_prob = np.exp(corrcoef_dense / sigma_corr) * self.embedding_knn.A
+    #         self.transition_prob /= self.transition_prob.sum(1)[:, None]
+
+    #         if hasattr(self, "corrcoef_random"):
+    #             logging.debug("Calculate transition probability for negative control")
+    #             corrcoef_random_dense = self.corrcoef_random.toarray() if sp.issparse(self.corrcoef_random) else self.corrcoef_random
+    #             self.transition_prob_random = np.exp(corrcoef_random_dense / sigma_corr) * self.embedding_knn.A
+    #             self.transition_prob_random /= self.transition_prob_random.sum(1)[:, None]
+
+    #         # Calculate unitary vectors
+    #         unitary_vectors = self.embedding.T[:, None, :] - self.embedding.T[:, :, None]
+    #         with np.errstate(divide='ignore', invalid='ignore'):
+    #             unitary_vectors /= np.linalg.norm(unitary_vectors, ord=2, axis=0)
+    #             np.fill_diagonal(unitary_vectors[0, ...], 0)
+    #             np.fill_diagonal(unitary_vectors[1, ...], 0)
+
+    #         # Calculate delta embedding
+    #         self.delta_embedding = (self.transition_prob * unitary_vectors).sum(2)
+    #         self.delta_embedding -= (self.embedding_knn.A * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+    #         self.delta_embedding = self.delta_embedding.T
+
+    #         if hasattr(self, "corrcoef_random"):
+    #             self.delta_embedding_random = (self.transition_prob_random * unitary_vectors).sum(2)
+    #             self.delta_embedding_random -= (self.embedding_knn.A * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+    #             self.delta_embedding_random = self.delta_embedding_random.T
+
+    #     except Exception as e:
+    #         logging.error(f"Error in _calculate_embedding_shift_old: {str(e)}")
+    #         raise
+
+    #     logging.debug("Embedding shift calculation (old method) completed successfully.")
+
     def _calculate_embedding_shift_old(self, sigma_corr: float = 0.05) -> None:
-        logging.debug("Calculate transition probability")
+        logging.debug("Calculate transition probability using old method")
 
-        # NOTE maybe sparse matrix here are slower than dense
-        # NOTE if knn_random this could be made much faster either using sparse matrix or neigh_ixs
-        self.transition_prob = np.exp(self.corrcoef / sigma_corr) * self.embedding_knn.toarray()  # naive
-        self.transition_prob /= self.transition_prob.sum(1)[:, None]
+        # Check if required attributes are set
+        if self.corrcoef is None or self.embedding_knn is None or self.embedding is None:
+            raise ValueError("corrcoef, embedding_knn, and embedding must be set before calling this method.")
+
+        try:
+            # Convert corrcoef to dense if it's sparse
+            corrcoef_dense = self.corrcoef.toarray() if sp.issparse(self.corrcoef) else self.corrcoef
+
+            # Convert embedding_knn to dense
+            embedding_knn_dense = self.embedding_knn.toarray() if sp.issparse(self.embedding_knn) else self.embedding_knn
+
+            # Calculate transition probability
+            self.transition_prob = np.exp(corrcoef_dense / sigma_corr) * embedding_knn_dense
+            self.transition_prob /= self.transition_prob.sum(1)[:, None]
+
+            if hasattr(self, "corrcoef_random"):
+                logging.debug("Calculate transition probability for negative control")
+                corrcoef_random_dense = self.corrcoef_random.toarray() if sp.issparse(self.corrcoef_random) else self.corrcoef_random
+                self.transition_prob_random = np.exp(corrcoef_random_dense / sigma_corr) * embedding_knn_dense
+                self.transition_prob_random /= self.transition_prob_random.sum(1)[:, None]
+
+            # Calculate unitary vectors
+            unitary_vectors = self.embedding.T[:, None, :] - self.embedding.T[:, :, None]
+            with np.errstate(divide='ignore', invalid='ignore'):
+                unitary_vectors /= np.linalg.norm(unitary_vectors, ord=2, axis=0)
+                np.fill_diagonal(unitary_vectors[0, ...], 0)
+                np.fill_diagonal(unitary_vectors[1, ...], 0)
+
+            # Calculate delta embedding
+            self.delta_embedding = (self.transition_prob * unitary_vectors).sum(2)
+            self.delta_embedding -= (embedding_knn_dense * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+            self.delta_embedding = self.delta_embedding.T
+
+            if hasattr(self, "corrcoef_random"):
+                self.delta_embedding_random = (self.transition_prob_random * unitary_vectors).sum(2)
+                self.delta_embedding_random -= (embedding_knn_dense * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+                self.delta_embedding_random = self.delta_embedding_random.T
+
+        except Exception as e:
+            logging.error(f"Error in _calculate_embedding_shift_old: {str(e)}")
+            raise
+
+        logging.debug("Embedding shift calculation (old method) completed successfully.")
+
+    # def _calculate_embedding_shift_old(self, sigma_corr: float = 0.05) -> None:
+    #     logging.debug("Calculate transition probability")
+
+    #     # NOTE maybe sparse matrix here are slower than dense
+    #     # NOTE if knn_random this could be made much faster either using sparse matrix or neigh_ixs
+    #     self.transition_prob = np.exp(self.corrcoef / sigma_corr) * self.embedding_knn.toarray()  # naive
+    #     self.transition_prob /= self.transition_prob.sum(1)[:, None]
         
-        if hasattr(self, "corrcoef_random"):
-            logging.debug("Calculate transition probability for negative control")
-            self.transition_prob_random = np.exp(self.corrcoef_random / sigma_corr) * self.embedding_knn.toarray()  # naive
-            self.transition_prob_random /= self.transition_prob_random.sum(1)[:, None]
+    #     if hasattr(self, "corrcoef_random"):
+    #         logging.debug("Calculate transition probability for negative control")
+    #         self.transition_prob_random = np.exp(self.corrcoef_random / sigma_corr) * self.embedding_knn.toarray()  # naive
+    #         self.transition_prob_random /= self.transition_prob_random.sum(1)[:, None]
 
-        unitary_vectors = self.embedding.T[:, None, :] - self.embedding.T[:, :, None]  # shape (2,ncells,ncells)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            unitary_vectors /= np.linalg.norm(unitary_vectors, ord=2, axis=0)
-            np.fill_diagonal(unitary_vectors[0, ...], 0)
-            np.fill_diagonal(unitary_vectors[1, ...], 0)
+    #     unitary_vectors = self.embedding.T[:, None, :] - self.embedding.T[:, :, None]  # shape (2,ncells,ncells)
+    #     with np.errstate(divide='ignore', invalid='ignore'):
+    #         unitary_vectors /= np.linalg.norm(unitary_vectors, ord=2, axis=0)
+    #         np.fill_diagonal(unitary_vectors[0, ...], 0)
+    #         np.fill_diagonal(unitary_vectors[1, ...], 0)
 
-        self.delta_embedding = (self.transition_prob * unitary_vectors).sum(2)
-        self.delta_embedding -= (self.embedding_knn.toarray() * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
-        self.delta_embedding = self.delta_embedding.T
+    #     self.delta_embedding = (self.transition_prob * unitary_vectors).sum(2)
+    #     self.delta_embedding -= (self.embedding_knn.toarray() * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+    #     self.delta_embedding = self.delta_embedding.T
 
-        if hasattr(self, "corrcoef_random"):
-            self.delta_embedding_random = (self.transition_prob_random * unitary_vectors).sum(2)
-            self.delta_embedding_random -= (self.embedding_knn.toarray() * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
-            self.delta_embedding_random = self.delta_embedding_random.T
+    #     if hasattr(self, "corrcoef_random"):
+    #         self.delta_embedding_random = (self.transition_prob_random * unitary_vectors).sum(2)
+    #         self.delta_embedding_random -= (self.embedding_knn.toarray() * unitary_vectors).sum(2) / self.embedding_knn.sum(1).A.T
+    #         self.delta_embedding_random = self.delta_embedding_random.T
 
     def calculate_grid_arrows(self, smooth: float=0.5, steps: Tuple=(40, 40),
                               n_neighbors: int=100, n_jobs: int=4, xylim: Tuple=((None, None), (None, None))) -> None:
